@@ -14,7 +14,6 @@ closing_prices_eval = data_eval.loc[:, "Close"]
 v_eval = closing_prices_eval.values
 
 
-
 def getLastNPrices(numDays, row, pricesData):
     lastNPrices = np.zeros(numDays)
     avg = 0
@@ -26,17 +25,15 @@ def getLastNPrices(numDays, row, pricesData):
     if (row <= numDays):
         for j in range(row):
             avg = pricesData[j] + avg
-            #print(avg)
         avg = avg / row
     for i in range(numDays):
         if (row - numDays + i + 1 >= 0):
             lastNPrices[i] = pricesData[row - numDays + i + 1]
         else:
             lastNPrices[i] = avg
-    #print(avg)
     return lastNPrices.tolist()
 
-#INDEX STARTS AT 1
+
 # TODO change to include stuff other than just closing prices
 class State:
     def __init__(State, account, index, numStocks, lastNClosingPrices):
@@ -45,98 +42,95 @@ class State:
         #min_x = min(account,index,numStocks,max(lastNClosingPrices))
         #(2 * (account - min_x) / (max_x - min_x)) - 1
 
-
         State.account = account
         State.index = index
         State.numStocks = numStocks
         State.lastNClosingPrices = lastNClosingPrices
 
     # Returns array of last N prices starting at (including) index row from array of prices v
-
-    #if numDays is 0 then it just gives todays price
-
-
+    # if numDays is 0 then it just gives today's price
     def __str__(self):
         return "index:" + str(self.index ) + "\n" + "account:" + str(self.account )+ "\n" \
                + "numStocks:" + str(self.numStocks) + "\n" \
                + "lastNClosingPrices: \n" + str(self.lastNClosingPrices)
 
-    #returns the next state given the action and the closing price of the next day
+    # returns the next state given the action and the closing price of the next day
     # TODO change to include stuff other than just closing prices
     # TODO change to include buying and selling other quantities
     # TODO CHECK IF ACTION IS DOABLE IN OUTER LOOP
-    def getNextState(self,action,nextPrice):
+    def getNextState(self, action, nextPrice):
         newClosingPrices = self.lastNClosingPrices[1:]
         newClosingPrices.append(nextPrice)
         newAccount = self.account
         newNumStocks = self.numStocks
-
-        if(action.action == act.Actions.buy):
-            newAccount -= self.lastNClosingPrices[-1]*action.amount
+        if (action.action == act.Actions.buy):
+            newAccount -= self.lastNClosingPrices[-1] * action.amount
             newNumStocks += action.amount
-        elif(action.action == act.Actions.sell):
+        elif (action.action == act.Actions.sell):
             newAccount += self.lastNClosingPrices[-1] * action.amount
             newNumStocks -= action.amount
+        return State(newAccount, self.index+1, newNumStocks, newClosingPrices)
 
-        return State(newAccount,self.index+1,newNumStocks,newClosingPrices)
-
-
-
-     # the reward is the increase in the value of your portfolio
-     # returns reward recieved if the given action is carried out on this state
-    #TODO explore possible better reward functions?
-
-    def calcReward(self,action,nextPrice,startingPortfolio):
-        nextState = self.getNextState(action,nextPrice)
+    # the reward is the increase in the value of your portfolio
+    # returns reward recieved if the given action is carried out on this state
+    # TODO explore possible better reward functions?
+    def calcReward(self, action, nextPrice, startingPortfolio):
+        nextState = self.getNextState(action, nextPrice)
         holdingPenalty = 0
-        if(action.action ==act.Actions.hold):
-
+        if (action.action == act.Actions.hold):
             holdingPenalty = 0
+        return holdingPenalty + ((nextState.account + (nextState.numStocks * nextState.lastNClosingPrices[-1])) - startingPortfolio)
 
-        return holdingPenalty + ((nextState.account + (nextState.numStocks*nextState.lastNClosingPrices[-1]))-startingPortfolio)
 
     def calcQvalue(self,weights):
+        return (weights.accountWeight * self.account) + (weights.numStocksWeight * self.numStocks) \
+                + np.dot(self.lastNClosingPrices, weights.pricesWeights)
 
-            return (weights.accountWeight*self.account) + (weights.numStocksWeight*self.numStocks)\
-                    + np.dot(self.lastNClosingPrices,weights.pricesWeights)
-
-    #returns the best action and maxQ value for this state (Q value if that action was applied to it),takes in list
-    #possible actions given current weights
-
-    def maxQAndAction(self,weights,actions,nextPrice):
+    # returns the best action and maxQ value for this state (Q value if that action was applied to it),takes in list
+    # possible actions given current weights
+    def maxQAndAction(self, weights, actions, nextPrice):
         bestAction = None
         max = -2.2250738585072014e308
         for action in actions:
-            nextState = self.getNextState(action,nextPrice)
+            nextState = self.getNextState(action, nextPrice)
             nextQ = nextState.calcQvalue(weights)
             if nextQ > max:
                 max = nextQ
                 bestAction = action
-        return max,bestAction
-    def calcDifference(self,nextPrice,action,actions,next_nextPrice,weights,startingPortfolio,gamma):
+        return max, bestAction
+
+
+    def calcDifference(self, nextPrice, action, actions, next_nextPrice, weights, startingPortfolio, gamma):
         oldQ = self.calcQvalue(weights)
-        reward = self.calcReward(action,nextPrice,startingPortfolio)
-        nextState = self.getNextState(action,nextPrice)
-        maxQsprime,bestAction = nextState.maxQAndAction(weights,actions,next_nextPrice)
-        return (reward + gamma*(maxQsprime))-oldQ
+        reward = self.calcReward(action, nextPrice, startingPortfolio)
+        nextState = self.getNextState(action, nextPrice)
+        maxQsprime, bestAction = nextState.maxQAndAction(weights, actions, next_nextPrice)
+        return (reward + gamma * maxQsprime) - oldQ
 
-    def updateWeights(self,oldWeights,alpha,difference):
-        newAccountWeight = oldWeights.accountWeight + (alpha*difference*self.account)
-        newNumStocksWeight = oldWeights.numStocksWeight + (alpha*difference*self.numStocks)
-        newPricesWeights = [sum(x) for x in zip(oldWeights.pricesWeights,[alpha*difference*price for price in self.lastNClosingPrices])]
-        max_x = max(newAccountWeight,newNumStocksWeight,max(newPricesWeights))
-        min_x = min(newAccountWeight,newNumStocksWeight,min(newPricesWeights))
-        range = max_x- min_x
-        norm_newpricesweight = [(2*(priceweight-min_x)/range)-1 for priceweight in newPricesWeights]
 
-        return w.Weights((2*(newAccountWeight-min_x)/range)-1,(2*(newNumStocksWeight-min_x)/range)-1,norm_newpricesweight)
+    def updateWeights(self, oldWeights, alpha, difference):
+        newAccountWeight = oldWeights.accountWeight + (alpha * difference * self.account)
+        newNumStocksWeight = oldWeights.numStocksWeight + (alpha * difference * self.numStocks)
+        newPricesWeights = [sum(x) for x in zip(oldWeights.pricesWeights, [alpha * difference * price for price in self.lastNClosingPrices])]
+        max_x = max(newAccountWeight, newNumStocksWeight, max(newPricesWeights))
+        min_x = min(newAccountWeight, newNumStocksWeight, min(newPricesWeights))
+        range = max_x - min_x
+        if range != 0:
+            norm_newpricesweight = [(2 * (priceweight - min_x) / range) - 1 for priceweight in newPricesWeights]
+            return w.Weights((2 * (newAccountWeight - min_x) / range) - 1, (2 * (newNumStocksWeight - min_x)/range) - 1, norm_newpricesweight)
+        elif min_x == 0 and max_x == 0:
+            norm_newpricesweight = [0 for priceweight in newPricesWeights]
+            return w.Weights(0, 0, norm_newpricesweight)
+        norm_newpricesweight = [1 for priceweight in newPricesWeights]
+        return w.Weights(1, 1, norm_newpricesweight)
 
-        #returns action based on epsilon
-    def EpsilonPolicy(self,epsilon,actions,weights,nextPrice):
+
+    # returns action based on epsilon
+    def EpsilonPolicy(self, epsilon, actions, weights, nextPrice):
         max, bestA = self.maxQAndAction(weights, actions, nextPrice)
-        choices = ['best','random']
-        choice = np.random.choice(choices,p=[(1-epsilon),epsilon])
-        if(choice =='best'):
+        choices = ['best', 'random']
+        choice = np.random.choice(choices, p=[(1-epsilon), epsilon])
+        if(choice == 'best'):
             return bestA
         else:
             withoutBest = actions[:]
@@ -144,54 +138,40 @@ class State:
             return np.random.choice(withoutBest)
 
 
-def plotChoices(v, choices):
-    buy = act.Action(act.Actions.buy, 1)
-    sell = act.Action(act.Actions.sell, 1)
-    hold = act.Action(act.Actions.hold, 1)
 
+
+def plotChoices(v, choices):
     plt.plot(v)
     count = 0
     for i in v:
-
         if count >= len(choices):
             break
-
         elif choices[count].action == act.Actions.buy:
             plt.scatter(count, i, c='green')
         elif choices[count].action == act.Actions.sell:
             plt.scatter(count, i, c='red')
-        elif choices[count].action == act.Actions.hold:
-            plt.scatter(count, i, c='blue')
-
-
-
+        # elif choices[count].action == act.Actions.hold:
+        #     plt.scatter(count, i, c='blue')
         count += 1
     plt.show()
 
 
 def plotChoices_eval(v_eval, choices):
-    buy = act.Action(act.Actions.buy, 1)
-    sell = act.Action(act.Actions.sell, 1)
-    hold = act.Action(act.Actions.hold, 1)
-
     plt.plot(v_eval)
     count = 0
     for i in v_eval:
-
         if count >= len(choices):
             break
-
         elif choices[count].action == act.Actions.buy:
             plt.scatter(count, i, c='green')
         elif choices[count].action == act.Actions.sell:
             plt.scatter(count, i, c='red')
-        elif choices[count].action == act.Actions.hold:
-            plt.scatter(count, i, c='blue')
-
-
-
+        # elif choices[count].action == act.Actions.hold:
+        #     plt.scatter(count, i, c='blue')
         count += 1
     plt.show()
+
+
 def plotBalances(states):
     x = []
     y = []
@@ -206,45 +186,41 @@ def plotBalances(states):
     plt.title('Learning Curve')
     plt.show()
 
-def QLearn(episodes,epsilon,gamma,alpha,startingAccount,n,actions):
-    weights = w.Weights(0,0,[0 for i in range(n)])
+
+def QLearn(episodes, epsilon, gamma, alpha, startingAccount, n, actions):
+    weights = w.Weights(0, 0, [0 for i in range(n)])
     epsilon_change = epsilon / episodes
     choices = []
     states = []
-    cantSell= [x for x in actions if x.action != act.Actions.sell]
+    cantSell = [x for x in actions if x.action != act.Actions.sell]
     for i in range(episodes):
-        lastNPrices = getLastNPrices(n,0,v)
-        state = State(startingAccount,0,0,lastNPrices)
-
+        lastNPrices = getLastNPrices(n, 0, v)
+        state = State(startingAccount, 0, 0, lastNPrices)
         for j,price in enumerate(v):
-            if(j < len(v)-2):
-
+            if(j < len(v) - 2):
                 nextPrice = v[j+1]
-                if(state.numStocks>0):
-                    action = state.EpsilonPolicy(epsilon,actions,weights,v[j+1])
+                if(state.numStocks > 0):
+                    action = state.EpsilonPolicy(epsilon, actions, weights, v[j+1])
                 else:
-                    action = state.EpsilonPolicy(epsilon,cantSell,weights,v[j+1])
-
-                if(i==episodes-1):
+                    action = state.EpsilonPolicy(epsilon, cantSell, weights, v[j+1])
+                if(i == episodes - 1):
                     choices.append(action)
-
-
                 #TODO: CHECK IF ACTION IS DOABLE HERE
                 #TODO: DEFINE TERMINAL STATES
-                nextState = state.getNextState(action,nextPrice)
-                #print(nextState.account)
-                reward = state.calcReward(action,nextPrice,startingAccount)
-                difference = state.calcDifference(nextPrice,action,actions,v[j+2],weights,startingAccount,gamma)
-                weights = state.updateWeights(weights,alpha,difference)
+                nextState = state.getNextState(action, nextPrice)
+                difference = state.calcDifference(nextPrice, action, actions, v[j+2], weights, startingAccount, gamma)
+                weights = state.updateWeights(weights, alpha, difference)
                 state = nextState
         epsilon -= epsilon_change
-        print("episode:" + str(i) + "\n" + "account=" + str(state.account) + "\n" + "numStocks:" + str(state.numStocks))
+        if i % 10 == 0:
+            print("Episode: " + str(i) + ", Account: " + str(state.account) + ", numStocks: " + str(state.numStocks))
         states.append(state)
-    plotChoices(v,choices)
+    plotChoices(v, choices)
     plotBalances(states)
     return weights
 
-def evaluate(weights,startingAmount,n,actions):
+
+def evaluate(weights, startingAmount, n, actions):
     lastNPrices = getLastNPrices(n, 0, v_eval)
     state = State(startingAmount, 0, 0, lastNPrices)
     choices = []
@@ -266,34 +242,15 @@ def evaluate(weights,startingAmount,n,actions):
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 buy = act.Action(act.Actions.buy,1)
 sell = act.Action(act.Actions.sell,1)
 hold = act.Action(act.Actions.hold,1)
 actions = [buy,sell,hold]
 weights = w.Weights(0.5,-1,[1,3,4,6,7])
-
-
-
 lastNPrices = getLastNPrices(5,5,v)
 currentState = State(10000,5,0,lastNPrices)
 
-evaluate(QLearn(1000,0.6,0.8,0.001,10000,20,actions),10000,20,actions)
-
+evaluate(QLearn(400, 0.6, 0.8, 0.001, 10000, 20, actions), 10000, 20, actions)
 
 
 
