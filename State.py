@@ -175,6 +175,38 @@ def plotChoices_eval(v_eval, choices):
         count += 1
     plt.show()
 
+# TODO: Make Legend more readable (instead of count, use Strings)
+def plotWeights(weights, episodes):
+    all_weights = []
+    x = []
+    accountWeights = []
+    numStocksWeights = []
+    pricesWeightsWeights = []
+    for p in weights[0].pricesWeights:
+        pricesWeightsWeights.append([])
+    for w in weights:
+        accountWeights.append(w.accountWeight)
+        numStocksWeights.append(w.numStocksWeight)
+        index = 0
+        for p in w.pricesWeights:
+            pricesWeightsWeights[index].append(p)
+            index += 1
+    all_weights.append(accountWeights)
+    all_weights.append(numStocksWeights)
+    for p in pricesWeightsWeights:
+        all_weights.append(p)
+    for i in range(episodes):
+        x.append(i)
+    count = 0
+    for w in all_weights:
+        plt.plot(x, w, label=count)
+        count += 1
+    plt.legend(loc="lower left")
+    plt.xlabel('episode')
+    plt.ylabel('weighting')
+    plt.title('Weights')
+    plt.show()
+
 
 def plotBalances(states):
     x = []
@@ -196,6 +228,7 @@ def QLearn(episodes, epsilon, gamma, alpha, startingAccount, n, actions):
     epsilon_change = epsilon / episodes
     choices = []
     states = []
+    all_weights = []
     for i in range(episodes):
         lastNPrices = getLastNPrices(n, 0, v)
         state = State(startingAccount, 0, 0, lastNPrices)
@@ -213,8 +246,10 @@ def QLearn(episodes, epsilon, gamma, alpha, startingAccount, n, actions):
         if i % 10 == 0:
             print("Episode: " + str(i) + ", Account: " + str(state.account) + ", numStocks: " + str(state.numStocks))
         states.append(state)
+        all_weights.append(weights)
     plotChoices(v, choices)
     plotBalances(states)
+    plotWeights(all_weights, episodes)
     return weights
 
 
@@ -240,15 +275,12 @@ buy = act.Action(act.Actions.buy, 1)
 sell = act.Action(act.Actions.sell, 1)
 hold = act.Action(act.Actions.hold, 1)
 actions = [buy, sell, hold]
-for n in range(2, 3):
-    actions.append(act.Action(act.Actions.buy, n))
-    actions.append(act.Action(act.Actions.sell, n))
-    actions.append(act.Action(act.Actions.hold, n))
-weights = w.Weights(0.5, -1, [1, 3, 4, 6, 7])
-lastNPrices = getLastNPrices(5, 5, v)
-currentState = State(10000, 5, 0, lastNPrices)
+# for n in range(2, 3):
+#     actions.append(act.Action(act.Actions.buy, n))
+#     actions.append(act.Action(act.Actions.sell, n))
+#     actions.append(act.Action(act.Actions.hold, n))
 
-evaluate(QLearn(100, 0.6, 0.8, 0.001, 10000, 20, actions), 10000, 20, actions)
+evaluate(QLearn(20, 0.6, 0.8, 0.001, 10000, 5, actions), 10000, 5, actions)
 
 
 # print(currentState)
