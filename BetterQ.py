@@ -15,16 +15,28 @@ test_SP = data_SP[1300:1599]
 
 train_SP = train_SP.drop(columns=['Class','Date'])
 test_SP = test_SP.drop(columns=['Class','Date'])
+
+
 num_features = len(train_SP.columns)
 closing = train_SP.loc[:,'Closing Price']
+opening = train_SP.loc[:, 'Opening Price']
+
+closing_eval = test_SP.loc[:,'Closing Price']
+opening_eval = test_SP.loc[:,'Opening Price']
+
 print(closing)
 train_SP = train_SP.values
 train_SP = np.array(train_SP)
 train_SP = train_SP.astype(np.float)
+print(test_SP)
+test_SP = test_SP.values
+test_SP = np.array(test_SP)
+test_SP = test_SP.astype(np.float)
+
 #print(train_SP[0])
 
 
-test_SP = test_SP.values
+print(test_SP)
 
 
 def getLastNPrices(numDays, row, pricesData):
@@ -151,18 +163,35 @@ def plotBalances(states):
     plt.title('Learning Curve')
     plt.show()
 
-def plotChoices(closing, choices):
+def plotChoices(closing, opening, choices):
     plt.plot(closing)
+    plt.plot(opening)
     count = 0
     for i in closing:
         if count >= len(choices):
             break
         elif choices[count].action == act.Actions.buy:
-            plt.scatter(count, i, c='green')
+            plt.scatter(count+29, i, c='green')
         # elif choices[count].action == act.Actions.sell:
         #     plt.scatter(count, i, c='red')
         elif choices[count].action == act.Actions.hold:
-             plt.scatter(count, i, c='blue')
+             plt.scatter(count+29, i, c='blue')
+        count += 1
+    plt.show()
+
+def plotChoicesEval(closing,opening, choices):
+    plt.plot(closing)
+    plt.plot(opening)
+    count = 0
+    for i in closing:
+        if count >= len(choices):
+            break
+        elif choices[count].action == act.Actions.buy:
+            plt.scatter(count + 1329, i, c='green')
+        # elif choices[count].action == act.Actions.sell:
+        #     plt.scatter(count, i, c='red')
+        elif choices[count].action == act.Actions.hold:
+            plt.scatter(count + 1329, i, c='blue')
         count += 1
     plt.show()
 
@@ -202,7 +231,23 @@ def QLearn(episodes, epsilon, startingAccount, gamma, alpha, actions, degree, nu
         print("Episode: " + str(i) + ", Account: " + str(state.account))
         states.append(state)
     plotBalances(states)
-    plotChoices(closing,choices)
+    plotChoices(closing,opening,choices)
+    return weights
+
+def evaluate(weights, startingAmount, actions,num_features,degree):
+    state = State(startingAmount,0,test_SP[0],num_features,degree)
+    choices = []
+    for j in range(len(test_SP)):
+        if j < len(test_SP)-2:
+            next_features = test_SP[j+1]
+            max, action = state.maxQAndAction(weights,actions,next_features)
+            choices.append(action)
+            state = state.getNextState(action,next_features)
+    print("account_eval:" + str(state.account))
+    plotChoicesEval(closing_eval,opening_eval,choices)
+
+
+
 
 
 
@@ -215,10 +260,11 @@ def QLearn(episodes, epsilon, startingAccount, gamma, alpha, actions, degree, nu
 # degree = 2
 # testState = State(1000,1,train_SP[0],num_features+1,degree)
 buy = act.Action(act.Actions.buy, 1)
+
 hold = act.Action(act.Actions.hold, 1)
 actions = [buy, hold]
 
-QLearn(200,0.6,10000,0.8,0.0001,actions,1,26)
+evaluate(QLearn(500,0.6,10000,0.8,0.0001,actions,1,26),10000,actions,26,1)
 
 
 
